@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Nib Diary</string>
+    <string name="tab_diary">浏览</string>
+    <string name="tab_calendar">日历</string>
+    <string name="tab_mine">我的</string>
+    <string name="tab_settings">设置</string>
+</resources>

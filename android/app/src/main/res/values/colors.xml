@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- White round base, like the default avatar (📓 on white circle). -->
+    <color name="ic_launcher_background">#FFFFFF</color>
+    <!-- Matches the sky-blue diary background: shown while the first
+         frame (and its async background decode) is still building. -->
+    <color name="window_background">#DFEAF6</color>
+</resources>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Diary" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowLightStatusBar">true</item>
+        <!-- Sky-blue from the first frame on: no white flash while the
+             launch animation runs and the background decodes. -->
+        <item name="android:windowBackground">@color/window_background</item>
+    </style>
+</resources>

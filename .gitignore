@@ -1,0 +1,25 @@
+# Gradle / Android build output
+android/.gradle/
+android/.kotlin/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/signing.properties
+android/keystore/
+*.iml
+*.apk
+
+# Server runtime artifacts
+server/data/
+
+# Local tools and big archives
+gradle-8.13-bin.zip
+.tools/
+
+# Scratch / temporary
+.scratch/
+
+# Test screenshots
+Screenshot_*.jpg
+diary-server-src.zip

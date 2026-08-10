@@ -35,10 +35,20 @@ class DetailViewModel(
     private val _exporting = MutableStateFlow(false)
     val exporting: StateFlow<Boolean> = _exporting.asStateFlow()
 
-    fun delete() {
+    /**
+     * Deletes the entry and reports completion via [onDone] on the main
+     * thread. The callback is invoked from the coroutine itself, NOT from
+     * a LaunchedEffect keyed on [deleted]: if the reading sheet leaves the
+     * composition before the delete finishes (user closes it, exit
+     * animation), the effect would be cancelled and the callback would
+     * never run, leaving a stale card in the browse list until the next
+     * page switch.
+     */
+    fun delete(onDone: () -> Unit) {
         viewModelScope.launch {
-            engine.deleteEntry(entryId)
+            runCatching { engine.deleteEntry(entryId) }
             _deleted.value = true
+            onDone()
         }
     }
 

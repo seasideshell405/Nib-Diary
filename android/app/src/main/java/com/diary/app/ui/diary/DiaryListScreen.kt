@@ -47,13 +47,20 @@ fun DiaryListScreen(
     viewModel: DiaryListViewModel = viewModel(factory = DiaryListViewModel.Factory),
 ) {
     val entries by viewModel.entries.collectAsStateWithLifecycle()
+    val hiddenIds by viewModel.hiddenIds.collectAsStateWithLifecycle()
+    // Cards deleted just now are hidden immediately (hide), even if the
+    // flow emission lags behind the DB write.
+    val visibleEntries = remember(entries, hiddenIds) {
+        if (hiddenIds.isEmpty()) entries
+        else entries.filterNot { it.id in hiddenIds }
+    }
 
     Scaffold(
         containerColor = Color.Transparent,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
     ) { innerPadding ->
         Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-            if (entries.isEmpty()) {
+            if (visibleEntries.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center,
@@ -62,8 +69,8 @@ fun DiaryListScreen(
                 }
             } else {
                 // Group entries by month, newest first: 2026年8月 -> 2026年7月 -> ...
-                val grouped = remember(entries) {
-                    entries.groupBy { entry ->
+                val grouped = remember(visibleEntries) {
+                    visibleEntries.groupBy { entry ->
                         val date = Instant.ofEpochMilli(entry.diaryDate)
                             .atZone(ZoneId.systemDefault()).toLocalDate()
                         YearMonth.of(date.year, date.monthValue)

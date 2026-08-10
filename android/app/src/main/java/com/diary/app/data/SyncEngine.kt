@@ -124,8 +124,11 @@ class SyncEngine(
         val entryImages = withContext(Dispatchers.IO) {
             val now = System.currentTimeMillis()
             val entry = dao.getById(entryId) ?: return@withContext emptyList()
-            dao.softDelete(entryId, now)
-
+            // The soft delete retries transient SQLite failures (write
+            // lock contention while the sync engine writes in parallel):
+            // a silently failed delete would leave the card in the list
+            // until the next refresh, looking like a stale card.
+            retrySoftDelete(entryId, now)
             val imgs = imageDao.getForEntry(entryId)
             for (img in imgs) {
                 imageDao.delete(img.id)
@@ -136,6 +139,18 @@ class SyncEngine(
         if (entryImages.isNotEmpty()) {
             CoroutineScope(Dispatchers.IO).launch {
                 entryImages.forEach { imageApi.deleteRemote(it.id) }
+            }
+        }
+    }
+
+    private suspend fun retrySoftDelete(entryId: String, now: Long) {
+        repeat(5) { attempt ->
+            try {
+                dao.softDelete(entryId, now)
+                return
+            } catch (e: Exception) {
+                if (attempt == 4) throw e
+                kotlinx.coroutines.delay(60)
             }
         }
     }

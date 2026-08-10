@@ -91,7 +91,6 @@ fun ReadingOverlay(
     viewModel: DetailViewModel = viewModel(key = entryId, factory = DetailViewModel.factory(entryId)),
 ) {
     val entry by viewModel.entry.collectAsStateWithLifecycle()
-    val deleted by viewModel.deleted.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val fileStore = remember(context) { ImageFileStore(context) }
@@ -101,10 +100,6 @@ fun ReadingOverlay(
     var fullImageId by remember { mutableStateOf<String?>(null) }
     var exportMessage by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(deleted) {
-        if (deleted) onDeleted()
-    }
-
     if (showDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
@@ -113,7 +108,7 @@ fun ReadingOverlay(
             confirmButton = {
                 TextButton(onClick = {
                     showDeleteConfirm = false
-                    viewModel.delete()
+                    viewModel.delete(onDeleted)
                 }) {
                     Text("删除", color = MaterialTheme.colorScheme.error)
                 }

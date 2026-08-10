@@ -58,8 +58,16 @@ fun CalendarScreen(
     val month by viewModel.month.collectAsStateWithLifecycle()
     val selectedDate by viewModel.selectedDate.collectAsStateWithLifecycle()
     val selectedEntry by viewModel.selectedEntry.collectAsStateWithLifecycle()
-    val markedDates = remember(dates) {
-        dates.map { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate() }.toSet()
+    val hiddenIds by viewModel.hiddenIds.collectAsStateWithLifecycle()
+    val hiddenDates by viewModel.hiddenDates.collectAsStateWithLifecycle()
+    // A day card/dot deleted just now is hidden immediately (hide), even
+    // if the flow emission lags behind the DB write.
+    val visibleDates = remember(dates, hiddenDates) { dates.filterNot { it in hiddenDates } }
+    val visibleEntry = remember(selectedEntry, hiddenIds) {
+        selectedEntry?.takeIf { it.id !in hiddenIds }
+    }
+    val markedDates = remember(visibleDates) {
+        visibleDates.map { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate() }.toSet()
     }
     val context = LocalContext.current
     val uiPrefs = remember(context) { UiPrefsStore(context) }
@@ -138,7 +146,7 @@ fun CalendarScreen(
         // Selected day's diary card, hugging the month grid.
         DayCard(
             date = selectedDate,
-            entry = selectedEntry,
+            entry = visibleEntry,
             onOpenEntry = { id -> onOpenEntry(id) },
         )
 

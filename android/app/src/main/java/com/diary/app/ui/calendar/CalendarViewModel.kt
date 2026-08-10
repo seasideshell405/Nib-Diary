@@ -8,24 +8,38 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.diary.app.DiaryApplication
 import com.diary.app.data.DiaryEntry
 import com.diary.app.data.EntryDao
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
 
+/**
+ * Calendar page. Both [dates] (marked dots) and [selectedEntry] (the day
+ * card) are single-source flows restarted by [refresh], so a delete or
+ * edit performed on another tab takes effect immediately without waiting
+ * for Room's async invalidation.
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
 class CalendarViewModel(private val dao: EntryDao) : ViewModel() {
 
-    // Marked dates are pre-warmed at startup: after a cold start the
-    // calendar shows dots immediately instead of flashing empty.
-    private val _dates = MutableStateFlow<List<Long>>(emptyList())
-    val dates: StateFlow<List<Long>> = _dates.asStateFlow()
+    private val refreshTick = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+    /** Marked dates (diary dots), pre-warmed from creation. */
+    val dates: StateFlow<List<Long>> =
+        refreshTick
+            .onStart { emit(Unit) }
+            .flatMapLatest { dao.observeActiveDiaryDates() }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     // View state kept in memory so tab switches never re-run or lose it.
     private val _month = MutableStateFlow(YearMonth.now())
@@ -33,11 +47,6 @@ class CalendarViewModel(private val dao: EntryDao) : ViewModel() {
 
     private val _selectedDate = MutableStateFlow(LocalDate.now())
     val selectedDate: StateFlow<LocalDate> = _selectedDate.asStateFlow()
-
-    init {
-        viewModelScope.launch { _dates.value = dao.getActiveDiaryDates() }
-        viewModelScope.launch { dao.observeActiveDiaryDates().collect { _dates.value = it } }
-    }
 
     fun onMonthChange(value: YearMonth) {
         _month.value = value
@@ -47,25 +56,45 @@ class CalendarViewModel(private val dao: EntryDao) : ViewModel() {
         _selectedDate.value = value
     }
 
-    /** Re-reads marked dates immediately (called after delete/edit). */
+    /** Re-reads marked dates and the day card right away (after delete/edit). */
     fun refresh() {
-        viewModelScope.launch { _dates.value = dao.getActiveDiaryDates() }
+        viewModelScope.launch { refreshTick.emit(Unit) }
     }
 
+    /** Ids hidden from the UI right after a delete (mirrors the browse list). */
+    private val _hiddenIds = MutableStateFlow<Set<String>>(emptySet())
+    val hiddenIds: StateFlow<Set<String>> = _hiddenIds.asStateFlow()
+
+    /** Diary dates of just-deleted entries: their dots vanish right away. */
+    private val _hiddenDates = MutableStateFlow<Set<Long>>(emptySet())
+    val hiddenDates: StateFlow<Set<Long>> = _hiddenDates.asStateFlow()
+
     /**
-     * The single entry for the selected day, kept alive in the ViewModel:
-     * returning to the tab reads the cached value instead of flashing the
-     * empty state while the DB query resolves.
+     * Immediately hides a deleted day card (and its dot); the flow catches
+     * up on its own. The DB row is already tombstoned by the delete, so
+     * every later query agrees and nothing "resurrects".
      */
+    fun hide(id: String) {
+        viewModelScope.launch {
+            _hiddenIds.value = _hiddenIds.value + id
+            dao.getById(id)?.let { _hiddenDates.value = _hiddenDates.value + it.diaryDate }
+        }
+    }
+
+    /** The single entry for the selected day, kept alive in the ViewModel. */
     val selectedEntry: StateFlow<DiaryEntry?> =
-        _selectedDate
-            .map { date ->
-                val start = date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-                val end = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-                start to end
+        refreshTick
+            .onStart { emit(Unit) }
+            .flatMapLatest {
+                _selectedDate
+                    .map { date ->
+                        val start = date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                        val end = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                        start to end
+                    }
+                    .flatMapLatest { (start, end) -> dao.observeFirstByDiaryDate(start, end) }
             }
-            .flatMapLatest { (start, end) -> dao.observeFirstByDiaryDate(start, end) }
-            .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(Long.MAX_VALUE), null)
+            .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     companion object {
         val Factory: ViewModelProvider.Factory = viewModelFactory {

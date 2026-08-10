@@ -103,3 +103,15 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
+
+// Release APK 以应用名 + 版本号命名：Nib Diary v0.1.1.apk
+android {
+    applicationVariants.all {
+        outputs.all {
+            if (this.name == "release") {
+                (this as com.android.build.gradle.internal.api.BaseVariantOutputImpl)
+                    .outputFileName = "Nib Diary v${versionName}.apk"
+            }
+        }
+    }
+}

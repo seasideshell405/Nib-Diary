@@ -21,8 +21,8 @@ android {
         applicationId = "com.diary.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 8
+        versionName = "0.1.1"
     }
 
     signingConfigs {
@@ -97,6 +97,9 @@ dependencies {
     testImplementation("androidx.room:room-testing:2.7.1")
     testImplementation("androidx.arch.core:core-testing:2.2.0")
     testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation(composeBom)
+    testImplementation("androidx.compose.ui:ui-test-junit4")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     debugImplementation("androidx.compose.ui:ui-tooling")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

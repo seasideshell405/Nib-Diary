@@ -20,7 +20,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -171,11 +170,10 @@ fun DiaryApp() {
     //    styles, lock screen): that surface color;
     //  - bare pages (settings, search, media library): the background
     //    image itself.
-    // Dark theme always uses white icons.
+    // The app is light-only for now (no dark mode adaptation).
     val surfaceAlpha by container.uiPrefs.surfaceAlpha.collectAsStateWithLifecycle()
     val view = LocalView.current
     val backgroundBrightness = LocalBackgroundBrightness.current
-    val darkTheme = isSystemInDarkTheme()
     val onTabPage = DiaryTab.entries.any { it.route == currentRoute }
     val onOwnSurface = locked ||
         currentRoute == Routes.EDITOR ||
@@ -183,14 +181,14 @@ fun DiaryApp() {
         currentRoute == Routes.BLOCK_STYLES
     SideEffect {
         val window = (view.context as? Activity)?.window ?: return@SideEffect
-        val surface = if (darkTheme) 0.10f else 0.98f
+        val surface = 0.98f
         val effective = when {
             onTabPage -> surface * surfaceAlpha + backgroundBrightness * (1f - surfaceAlpha)
             onOwnSurface -> surface
             else -> backgroundBrightness
         }
         WindowCompat.getInsetsController(window, view)
-            .isAppearanceLightStatusBars = !darkTheme && effective > 0.55f
+            .isAppearanceLightStatusBars = effective > 0.55f
     }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -260,11 +258,20 @@ fun DiaryApp() {
     }
 
     fun selectTab(tab: DiaryTab) {
+        // Read the back stack top SYNCHRONOUSLY. currentBackStackEntryAsState()
+        // updates a few frames after a navigation, so during/right after the
+        // tab transition the composable route can lag behind — tapping the
+        // tab that is already animating in would then navigate again,
+        // popUpTo() pops it, and the new entry replays the whole transition.
+        // currentBackStackEntry reflects the real stack immediately.
+        val topRoute = navController.currentBackStackEntry?.destination?.route
+        if (topRoute == tab.route) return
         navController.navigate(tab.route) {
-            // No saveState/restoreState: serializing the list state on every
-            // tab switch is a major jank source. Page state lives in ViewModels.
-            popUpTo(navController.graph.findStartDestination().id)
+            popUpTo(navController.graph.findStartDestination().id) {
+                saveState = true
+            }
             launchSingleTop = true
+            restoreState = true
         }
     }
 
@@ -528,8 +535,11 @@ fun DiaryApp() {
                         },
                         onDeleted = {
                             readingEntryId = null
-                            // The card must leave the list immediately;
-                            // Room invalidation can lag behind the delete.
+                            // Hide the card in the UI immediately; the DB
+                            // row is already tombstoned, the flow catches
+                            // up on its own.
+                            listViewModel.hide(entryId)
+                            calendarViewModel.hide(entryId)
                             listViewModel.refresh()
                             calendarViewModel.refresh()
                         },

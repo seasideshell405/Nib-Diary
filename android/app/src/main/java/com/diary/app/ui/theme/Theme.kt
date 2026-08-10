@@ -3,7 +3,6 @@ package com.diary.app.ui.theme
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -58,7 +57,9 @@ val LocalBackgroundBrightness = staticCompositionLocalOf { 1f }
 
 @Composable
 fun DiaryTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    // Dark mode is not supported yet: always use the light scheme even
+    // when the system is in dark mode.
+    darkTheme: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current

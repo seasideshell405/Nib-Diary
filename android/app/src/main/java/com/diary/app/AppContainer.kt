@@ -17,6 +17,7 @@ import com.diary.app.data.ProfileStore
 import com.diary.app.data.SyncEngine
 import com.diary.app.data.SyncStateStore
 import com.diary.app.data.UiPrefsStore
+import com.diary.app.data.UpdateManager
 
 class AppContainer(context: Context) {
     val database: AppDatabase = Room.databaseBuilder(
@@ -50,4 +51,7 @@ class AppContainer(context: Context) {
 
     /** Profile persistence: local + server. */
     val profileRepository = ProfileRepository(profileStore, api)
+
+    /** App self-update via GitHub Releases. */
+    val updateManager = UpdateManager(context)
 }

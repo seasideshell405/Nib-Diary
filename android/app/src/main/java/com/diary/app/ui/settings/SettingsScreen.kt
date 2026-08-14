@@ -1,17 +1,22 @@
 ﻿package com.diary.app.ui.settings
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -19,6 +24,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -26,6 +33,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
@@ -33,20 +41,30 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.diary.app.BuildConfig
+import com.diary.app.data.CheckResult
 import com.diary.app.data.SyncFailure
 import com.diary.app.data.SyncStatus
+import com.diary.app.data.UpdateState
 import com.diary.app.ui.theme.LocalTopBarTextColor
+import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsScreen(
@@ -68,15 +86,66 @@ fun SettingsScreen(
     val maskStrength by viewModel.maskStrength.collectAsStateWithLifecycle()
     val themeFromBackground by viewModel.themeFromBackground.collectAsStateWithLifecycle()
     val surfaceAlpha by viewModel.surfaceAlpha.collectAsStateWithLifecycle()
+    val updateState by viewModel.updateState.collectAsStateWithLifecycle()
+    val startupUpdateCheck by viewModel.startupUpdateCheck.collectAsStateWithLifecycle()
 
     var showSetPin by remember { mutableStateOf(false) }
     var showChangePin by remember { mutableStateOf(false) }
     var showDisablePin by remember { mutableStateOf(false) }
+    var showInstallGuide by remember { mutableStateOf(false) }
+    var showUpdateDialog by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var checking by remember { mutableStateOf(false) }
+    var notice by remember { mutableStateOf<String?>(null) }
+
+    // 居中气泡提示，短暂显示后自动消失。
+    LaunchedEffect(notice) {
+        if (notice != null) {
+            kotlinx.coroutines.delay(1000)
+            notice = null
+        }
+    }
+
+    fun showNotice(text: String) {
+        scope.launch { notice = text }
+    }
+
+    fun onCheckClicked() {
+        if (checking) return
+        checking = true
+        scope.launch {
+            try {
+                when (viewModel.checkForUpdate()) {
+                    is CheckResult.Latest -> showNotice("暂无更新")
+                    is CheckResult.Failed -> showNotice("检查更新失败")
+                    is CheckResult.Found -> showUpdateDialog = true
+                    is CheckResult.None -> {}
+                }
+            } finally {
+                checking = false
+            }
+        }
+    }
+
+    // 状态流驱动：发现新版本弹更新窗；下载完成后自动调起系统安装器，
+    // 未授权时引导开启"安装未知应用"。
+    LaunchedEffect(updateState) {
+        when (updateState) {
+            is UpdateState.Available -> showUpdateDialog = true
+            is UpdateState.ReadyToInstall -> {
+                if (!viewModel.installUpdate()) showInstallGuide = true
+            }
+            else -> {}
+        }
+    }
 
     val pickBackground = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia(),
     ) { uri -> uri?.let(viewModel::saveBackground) }
 
+    Box(modifier = Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -128,11 +197,24 @@ fun SettingsScreen(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
+                var showToken by remember { mutableStateOf(false) }
                 OutlinedTextField(
                     value = token,
                     onValueChange = viewModel::onTokenChange,
                     label = { Text("API Token") },
                     singleLine = true,
+                    visualTransformation = if (showToken) VisualTransformation.None else PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = if (showToken) KeyboardType.Text else KeyboardType.Password,
+                    ),
+                    trailingIcon = {
+                        IconButton(onClick = { showToken = !showToken }) {
+                            Icon(
+                                if (showToken) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                contentDescription = if (showToken) "隐藏 Token" else "显示 Token",
+                            )
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Button(
@@ -271,6 +353,76 @@ fun SettingsScreen(
                 }
             }
         }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = surfaceAlpha),
+        ),
+        // No elevation: a Material3 square shadow would box the translucent card.
+    ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("关于", style = MaterialTheme.typography.titleMedium)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Nib Diary  v${BuildConfig.VERSION_NAME}",
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            "更新通过 GitHub Releases 发布",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    TextButton(onClick = ::onCheckClicked) {
+                        if (checking) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                            )
+                        } else {
+                            Text("检查更新")
+                        }
+                    }
+                }
+                SettingSwitchRow(
+                    title = "启动时自动检查更新",
+                    subtitle = "打开应用时静默检查新版本，发现更新会弹出提示",
+                    checked = startupUpdateCheck,
+                    onCheckedChange = viewModel::setStartupUpdateCheck,
+                )
+            }
+        }
+    }
+
+    // 底部居中气泡提示：短暂显示后自动消失，不遮挡页面内容。
+    notice?.let { text ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Transparent),
+            contentAlignment = Alignment.BottomCenter,
+        ) {
+            Box(
+                modifier = Modifier
+                    .padding(bottom = 64.dp)
+                    .background(
+                        Color.White,
+                        RoundedCornerShape(24.dp),
+                    )
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+            ) {
+                Text(
+                    text,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        }
+    }
     }
 
     if (showSetPin) {
@@ -308,6 +460,93 @@ fun SettingsScreen(
                 showDisablePin = false
             },
             onDismiss = { showDisablePin = false },
+        )
+    }
+
+    val updateDialogState = updateState
+    if (showUpdateDialog &&
+        (updateDialogState is UpdateState.Available ||
+            updateDialogState is UpdateState.Downloading ||
+            updateDialogState is UpdateState.ReadyToInstall)
+    ) {
+        when (val s = updateDialogState) {
+            is UpdateState.Available -> AlertDialog(
+                onDismissRequest = { showUpdateDialog = false },
+                title = { Text("发现新版本 v${s.info.versionName}") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (s.info.releaseNotes.isNotBlank()) {
+                            Text(
+                                s.info.releaseNotes,
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                        Text(
+                            "安装包大小 ${"%.1f".format(s.info.apkSize / 1048576f)} MB",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = viewModel::downloadUpdate) { Text("下载并安装") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showUpdateDialog = false }) { Text("稍后") }
+                },
+            )
+            is UpdateState.Downloading -> AlertDialog(
+                onDismissRequest = {},
+                title = { Text("正在下载 v${s.info.versionName}") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        LinearProgressIndicator(
+                            progress = { s.progress },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Text(
+                            "${(s.progress * 100).toInt()}%",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                },
+                confirmButton = {},
+            )
+            is UpdateState.ReadyToInstall -> AlertDialog(
+                onDismissRequest = {},
+                title = { Text("下载完成") },
+                text = { Text("正在准备安装 v${s.info.versionName}…") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        if (!viewModel.installUpdate()) showInstallGuide = true
+                    }) { Text("立即安装") }
+                },
+                dismissButton = {},
+            )
+            else -> {}
+        }
+    }
+
+    if (showInstallGuide) {
+        AlertDialog(
+            onDismissRequest = { showInstallGuide = false },
+            title = { Text("需要安装权限") },
+            text = { Text("安装新版本前，需要允许「Nib Diary」安装未知应用。请在系统设置中开启。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showInstallGuide = false
+                    context.startActivity(
+                        Intent(
+                            Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                            Uri.parse("package:${context.packageName}"),
+                        ),
+                    )
+                }) { Text("去设置") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showInstallGuide = false }) { Text("取消") }
+            },
         )
     }
 

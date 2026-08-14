@@ -70,11 +70,23 @@ class UiPrefsStore(context: Context) {
             _surfaceAlpha.value = v
         }
 
+    /** Check for updates silently on app startup. Default on. */
+    private val _startupUpdateCheck = MutableStateFlow(prefs.getBoolean(KEY_STARTUP_UPDATE_CHECK, true))
+    val startupUpdateCheck: StateFlow<Boolean> = _startupUpdateCheck.asStateFlow()
+
+    var startupUpdateCheckEnabled: Boolean
+        get() = _startupUpdateCheck.value
+        set(value) {
+            prefs.edit().putBoolean(KEY_STARTUP_UPDATE_CHECK, value).apply()
+            _startupUpdateCheck.value = value
+        }
+
     private companion object {
         const val KEY_HAPTIC = "haptic_enabled"
         const val KEY_BG_MASK = "bg_mask"
         const val KEY_BG_MASK_STRENGTH = "bg_mask_strength"
         const val KEY_THEME_FROM_BG = "theme_from_bg"
         const val KEY_SURFACE_ALPHA = "surface_alpha"
+        const val KEY_STARTUP_UPDATE_CHECK = "startup_update_check"
     }
 }

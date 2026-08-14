@@ -36,11 +36,13 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -203,6 +205,26 @@ fun DiaryApp() {
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
     val biometricAvailable = remember { BiometricAuth.isAvailable(context) }
+
+    // 启动静默检查发现新版本时弹全局提示，可跳转设置页执行更新。
+    val updateManager = container.updateManager
+    val discoveredUpdate by updateManager.discovered.collectAsStateWithLifecycle()
+    if (discoveredUpdate != null) {
+        AlertDialog(
+            onDismissRequest = updateManager::consumeDiscovered,
+            title = { Text("发现新版本") },
+            text = { Text("Nib Diary v${discoveredUpdate!!.versionName} 已发布，可在设置页下载安装。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    updateManager.consumeDiscovered()
+                    navController.navigate(Routes.SETTINGS)
+                }) { Text("去更新") }
+            },
+            dismissButton = {
+                TextButton(onClick = updateManager::consumeDiscovered) { Text("稍后") }
+            },
+        )
+    }
 
     // Background image, re-decoded on appearance change. The default
     // drawable is decoded OFF the main thread too: decoding a full-screen

@@ -13,6 +13,9 @@ import com.diary.app.data.LockStore
 import com.diary.app.data.SyncEngine
 import com.diary.app.data.SyncStatus
 import com.diary.app.data.UiPrefsStore
+import com.diary.app.data.CheckResult
+import com.diary.app.data.UpdateManager
+import com.diary.app.data.UpdateState
 import com.diary.app.syncEngine
 import com.diary.app.ui.applock.BiometricAuth
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,6 +30,7 @@ class SettingsViewModel(
     private val appearanceStore: AppearanceStore,
     private val uiPrefs: UiPrefsStore,
     val biometricAvailable: Boolean,
+    private val updateManager: UpdateManager,
 ) : ViewModel() {
 
     private val _serverUrl = MutableStateFlow(configStore.getServerUrl())
@@ -63,6 +67,14 @@ class SettingsViewModel(
     val themeFromBackground: StateFlow<Boolean> = uiPrefs.themeFromBackground
     val surfaceAlpha: StateFlow<Float> = uiPrefs.surfaceAlpha
 
+    val updateState: StateFlow<UpdateState> = updateManager.state
+
+    val startupUpdateCheck: StateFlow<Boolean> = uiPrefs.startupUpdateCheck
+
+    fun setStartupUpdateCheck(enabled: Boolean) {
+        uiPrefs.startupUpdateCheckEnabled = enabled
+    }
+
     fun setHapticEnabled(enabled: Boolean) {
         uiPrefs.hapticEnabled = enabled
         _hapticEnabled.value = enabled
@@ -83,6 +95,16 @@ class SettingsViewModel(
     fun setSurfaceAlpha(value: Float) {
         uiPrefs.surfaceAlphaValue = value
     }
+
+    /** 返回检查结果，由 UI 决定弹提示还是开更新弹窗。 */
+    suspend fun checkForUpdate(): CheckResult = updateManager.check()
+
+    fun downloadUpdate() {
+        viewModelScope.launch { updateManager.download() }
+    }
+
+    /** 调起系统安装器；未授予安装未知应用权限时返回 false。 */
+    fun installUpdate(): Boolean = updateManager.install()
 
     fun onServerUrlChange(value: String) {
         _serverUrl.value = value
@@ -172,6 +194,7 @@ class SettingsViewModel(
                     appearanceStore = app.container.appearanceStore,
                     uiPrefs = app.container.uiPrefs,
                     biometricAvailable = BiometricAuth.isAvailable(app),
+                    updateManager = app.container.updateManager,
                 )
             }
         }
